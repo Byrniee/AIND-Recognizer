@@ -76,8 +76,31 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        # Implement model selection based on BIC scores
+        bestScore = float("-inf")
+        bestModel = None
+
+        for numberOfComponents in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                model = self.base_model(numberOfComponents)
+
+                logLikelihood = model.score(self.X, self.lengths)
+                logN = np.log(self.X.shape[0])
+                numberOfParams = numberOfComponents * (numberOfComponents - 1) + 2 * self.X.shape[1] * numberOfComponents
+
+                bic = -2 * logLikelihood + numberOfParams * logN
+
+                if bic < bestScore:
+                    bestScore = bic
+                    bestModel = model
+
+            except Exception as e:
+                continue
+
+        if bestModel is not None:
+            return bestModel  
+        else:
+            return self.base_model(self.n_constant)
 
 
 class SelectorDIC(ModelSelector):
@@ -90,11 +113,46 @@ class SelectorDIC(ModelSelector):
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
 
+    def logLikelihoodOfOtherWords(self, model, otherWordLengthPairs):
+        return [model[0].score(wordLengthPair[0], wordLengthPair[1]) for wordLengthPair in otherWordLengthPairs]
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        # Implement model selection based on DIC scores
+        
+        # Grab every word except this one
+        otherWordLengthPairs = [self.hwords[word] for word in self.words if word != self.this_word]
+        # (model, log)
+        models = []
+
+        bestScore = float("-inf")
+        bestModel = None
+
+        for numberOfComponents in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                model = self.base_model(numberOfComponents)
+                logLikelihood = model.score(self.X, self.lengths)
+                models.append((model, logLikelihood))
+
+            except Exception as e:
+                continue
+        
+        for index, model in enumerate(models):
+            hmmModel, logLikelihoodOfOriginalWord = model
+            score = logLikelihoodOfOriginalWord - np.mean(self.logLikelihoodOfOtherWords(model, otherWordLengthPairs))
+
+            if score > bestScore:
+                bestScore = score
+                bestModel = hmmModel
+
+
+        if bestModel is not None:
+            return bestModel  
+        else:
+            return self.base_model(self.n_constant)
+
+
 
 
 class SelectorCV(ModelSelector):
@@ -105,5 +163,46 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        # Implement model selection using CV
+        bestScore = float("-inf")
+        bestModel = None
+        average = 0
+        
+        for numberOfComponents in range(self.min_n_components, self.max_n_components + 1):
+            scores = []
+            numberOfSplits = 3
+            model = None
+            
+            if(len(self.sequences) < numberOfSplits):
+                break
+            
+            kFolds = KFold(random_state=self.random_state, n_splits=numberOfSplits)
+
+            for cvTrainingIndex, cvTestingIndex in kFolds.split(self.sequences):
+                trainingX, trainingLengths = combine_sequences(cvTrainingIndex, self.sequences)
+                testingX,  testingLengths  = combine_sequences(cvTestingIndex, self.sequences)
+
+                try:
+                    hmm = GaussianHMM(n_components=numberOfComponents, n_iter=1000, random_state=inst.random_state)
+                    model = hmm.fit(trainingX, trainingLengths)
+
+                    scores.append(model.score(testingX, testingLengths))
+                    
+                except Exception as e:
+                    break
+
+            if len(scores) > 0:
+                average = np.average(scores)  
+            else: 
+                average = float("-inf")
+            
+            if average > bestScore:
+                bestScore = average
+                bestModel = model
+        
+        if bestModel is not None:
+            return bestModel  
+        else:
+            return self.base_model(self.n_constant)
+
+        
