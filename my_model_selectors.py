@@ -77,7 +77,7 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # Implement model selection based on BIC scores
-        bestScore = float("-inf")
+        bestScore = float("inf")
         bestModel = None
 
         for numberOfComponents in range(self.min_n_components, self.max_n_components + 1):
@@ -86,7 +86,7 @@ class SelectorBIC(ModelSelector):
 
                 logLikelihood = model.score(self.X, self.lengths)
                 logN = np.log(self.X.shape[0])
-                numberOfParams = numberOfComponents * (numberOfComponents - 1) + 2 * self.X.shape[1] * numberOfComponents
+                numberOfParams = (numberOfComponents * numberOfComponents) + (2 * numberOfComponents * self.X.shape[1]) -1
 
                 bic = -2 * logLikelihood + numberOfParams * logN
 
